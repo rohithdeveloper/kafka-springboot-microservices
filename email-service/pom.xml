@@ -10,9 +10,9 @@
         <version>1.0.0</version>
     </parent>
 
-    <artifactId>order-service</artifactId>
-    <name>Order Service</name>
-    <description>Order microservice - creates and manages orders</description>
+    <artifactId>email-service</artifactId>
+    <name>Email Service</name>
+    <description>Email microservice - sends email notifications</description>
 
     <dependencies>
         <!-- Common module -->
@@ -31,6 +31,12 @@
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
+        </dependency>
+
+        <!-- Spring Mail -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
         <!-- Spring Data JPA -->

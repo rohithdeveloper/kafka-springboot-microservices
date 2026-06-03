@@ -1,194 +1,264 @@
 # Kafka Spring Boot Microservices
 
-A multi-module Spring Boot microservices project using Apache Kafka as the message broker for inter-service communication.
+A multi-module Spring Boot microservices project using Apache Kafka as the message broker for asynchronous communication between services.
 
-## Project Structure
+## Project Architecture
+
+This project demonstrates a distributed order processing system with three main microservices:
+
+### 1. **Order Service** (Port: 8081)
+- Creates and manages customer orders
+- Publishes `OrderCreatedEvent` to Kafka when a new order is created
+- Listens for `StockUpdatedEvent` to update order status
+- Database: H2 (in-memory)
+
+### 2. **Stock Service** (Port: 8082)
+- Manages product inventory
+- Listens for `OrderCreatedEvent` and reserves stock
+- Publishes `StockUpdatedEvent` with success/failure status
+- Handles stock reservation and release
+- Database: H2 (in-memory)
+
+### 3. **Email Service** (Port: 8083)
+- Sends email notifications for order events
+- Listens for `OrderCreatedEvent` and publishes confirmation emails
+- Logs all email communications
+- Database: H2 (in-memory)
+
+### 4. **Common Module**
+- Shared event classes for inter-service communication
+- Reusable utilities and models
+
+## Event Flow
 
 ```
-kafka-springboot-microservices/
-├── order-service/       # Order Service microservice
-├── stock-service/       # Stock Service microservice
-├── email-service/       # Email Service microservice
-├── common/             # Shared models and utilities
-├── pom.xml             # Parent POM
-└── docker-compose.yml  # Zookeeper and Kafka configuration
+Order Service          Stock Service          Email Service
+    |                      |                        |
+    |-- OrderCreatedEvent ->|                        |
+    |                       |-- StockUpdatedEvent -->|
+    |<-- (listens)          |                    (logs event)
+    |                       |
+    | (updates status)      |
 ```
-
-## Services Overview
-
-### 1. Order Service
-- Handles order creation and management
-- Publishes order events to Kafka
-- Consumes stock confirmation events
-- REST API on port 8001
-
-### 2. Stock Service
-- Manages inventory/stock
-- Listens to order events
-- Updates stock and publishes confirmation events
-- REST API on port 8002
-
-### 3. Email Service
-- Sends email notifications
-- Listens to order and stock events
-- Consumes events and sends appropriate emails
-- REST API on port 8003
 
 ## Prerequisites
 
-- Java 17+
-- Maven 3.6+
+- Java 17 or higher
+- Maven 3.6 or higher
 - Docker and Docker Compose (for Kafka and Zookeeper)
 
-## Setup Instructions
+## Setup and Running
 
-### Step 1: Start Kafka and Zookeeper
-
-The docker-compose.yml file is configured for your local Docker setup with Zookeeper and Kafka.
+### 1. Start Kafka and Zookeeper
 
 ```bash
 docker-compose up -d
 ```
 
-This will start:
-- Zookeeper on port 2181
-- Kafka on port 9092
+Verify that Kafka and Zookeeper are running:
+- Zookeeper: http://localhost:2181
+- Kafka: localhost:9092
 
-Verify Kafka is running:
-```bash
-docker ps
-docker logs kafka
-```
-
-### Step 2: Build the Project
+### 2. Build the Project
 
 ```bash
 mvn clean install
 ```
 
-### Step 3: Run the Microservices
+### 3. Run Each Service
 
-Each service can be run independently:
+Open three terminal windows and run each service:
 
+**Terminal 1 - Order Service:**
 ```bash
-# Order Service
 cd order-service
 mvn spring-boot:run
+```
 
-# Stock Service (new terminal)
+**Terminal 2 - Stock Service:**
+```bash
 cd stock-service
 mvn spring-boot:run
+```
 
-# Email Service (new terminal)
+**Terminal 3 - Email Service:**
+```bash
 cd email-service
 mvn spring-boot:run
 ```
 
-## Kafka Topics
-
-The following topics are automatically created and used by the microservices:
-
-- `orders` - Order events published by Order Service
-- `stock-updates` - Stock events published by Stock Service
-- `email-notifications` - Email notification events published by all services
-
 ## API Endpoints
 
-### Order Service (Port 8001)
-- `POST /api/orders` - Create a new order
-- `GET /api/orders/{orderId}` - Get order details
-- `GET /api/orders` - Get all orders
+### Order Service (http://localhost:8081)
 
-### Stock Service (Port 8002)
-- `GET /api/stock/{productId}` - Get stock details
-- `PUT /api/stock/{productId}` - Update stock
-- `GET /api/stock` - Get all stock items
+- **Create Order**
+  ```
+  POST /api/orders/create?productId=PROD001&quantity=5&price=100.0&customerEmail=customer@example.com
+  ```
 
-### Email Service (Port 8003)
-- `GET /api/emails/status` - Service health check
-- `GET /api/emails/notifications` - Get all sent notifications
+- **Get Order**
+  ```
+  GET /api/orders/{orderId}
+  ```
 
-## Configuration
+- **Get Orders by Customer**
+  ```
+  GET /api/orders/customer/{email}
+  ```
 
-### Kafka Configuration
-All services are configured to connect to Kafka at `localhost:9092`.
+- **Get Orders by Status**
+  ```
+  GET /api/orders/status/{status}
+  ```
 
-### Database
-- Order Service: H2 (in-memory)
-- Stock Service: H2 (in-memory)
-- Email Service: No database (uses in-memory cache)
+### Stock Service (http://localhost:8082)
 
-## Event Flow Example
+- **Initialize Stock**
+  ```
+  POST /api/stock/initialize?productId=PROD001&quantity=100
+  ```
 
-1. User creates an order via Order Service API
-2. Order Service publishes "OrderCreated" event to `orders` topic
-3. Stock Service listens and processes the order
-4. Stock Service publishes "StockReserved/StockFailed" event to `stock-updates` topic
-5. Email Service listens to both topics and sends notifications
+- **Get Stock**
+  ```
+  GET /api/stock/{productId}
+  ```
 
-## Technology Stack
+- **Release Stock**
+  ```
+  POST /api/stock/{productId}/release?quantity=5
+  ```
 
-- Spring Boot 3.2.0
-- Spring Kafka
-- Spring Data JPA
-- Spring Web
-- Kafka 3.6.0
-- Zookeeper 3.6
-- H2 Database
-- Maven
+### Email Service (http://localhost:8083)
+
+- **Get Email Log**
+  ```
+  GET /api/email/log/{emailLogId}
+  ```
+
+- **Get Email Logs by Order**
+  ```
+  GET /api/email/order/{orderId}
+  ```
+
+- **Get Email Logs by Status**
+  ```
+  GET /api/email/status/{status}
+  ```
+
+## Testing the Workflow
+
+### 1. Initialize Stock
+
+```bash
+curl -X POST "http://localhost:8082/api/stock/initialize?productId=PROD001&quantity=100"
+```
+
+### 2. Create an Order
+
+```bash
+curl -X POST "http://localhost:8081/api/orders/create?productId=PROD001&quantity=5&price=100.0&customerEmail=customer@example.com"
+```
+
+Response:
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "productId": "PROD001",
+  "quantity": 5,
+  "price": 100.0,
+  "customerEmail": "customer@example.com",
+  "status": "PENDING",
+  "createdAt": "2024-01-15T10:30:00"
+}
+```
+
+### 3. Check Order Status (after a few seconds)
+
+```bash
+curl "http://localhost:8081/api/orders/{orderId}"
+```
+
+Order status should change to "CONFIRMED" if stock was available.
+
+### 4. Check Stock
+
+```bash
+curl "http://localhost:8082/api/stock/PROD001"
+```
+
+Response:
+```json
+{
+  "id": "prod-123",
+  "productId": "PROD001",
+  "availableQuantity": 95,
+  "reservedQuantity": 5,
+  "createdAt": "2024-01-15T10:25:00",
+  "updatedAt": "2024-01-15T10:30:00"
+}
+```
+
+## Kafka Topics
+
+The following Kafka topics are automatically created:
+
+- `order-created-events` - Events when orders are created
+- `stock-updated-events` - Events when stock is updated
+- `order-status-update-events` - Events for order status changes
+
+## Architecture Highlights
+
+1. **Event-Driven**: Services communicate through Kafka events rather than direct API calls
+2. **Loose Coupling**: Services are independent and can be deployed separately
+3. **Scalability**: Easy to scale individual services based on load
+4. **Asynchronous Processing**: Non-blocking operations improve throughput
+5. **Database Isolation**: Each service has its own database (polyglot persistence)
+
+## Technologies Used
+
+- **Spring Boot 3.2.0** - Framework for building microservices
+- **Spring Kafka** - Kafka integration
+- **Spring Data JPA** - ORM for database operations
+- **H2 Database** - In-memory database for development
+- **Apache Kafka 7.5.0** - Message broker
+- **Zookeeper** - Kafka coordination
+- **Maven** - Build tool
+- **Lombok** - Reduce boilerplate code
+- **Docker & Docker Compose** - Container orchestration
+
+## Future Enhancements
+
+- [ ] Add authentication and authorization
+- [ ] Implement circuit breaker pattern
+- [ ] Add distributed tracing (Sleuth + Zipkin)
+- [ ] Implement service discovery (Consul/Eureka)
+- [ ] Add API Gateway
+- [ ] Implement dead letter queues for failed messages
+- [ ] Add monitoring and metrics (Prometheus + Grafana)
+- [ ] Implement health checks and readiness probes
+- [ ] Add integration tests
+- [ ] Setup CI/CD pipeline
 
 ## Troubleshooting
 
 ### Kafka Connection Issues
-- Ensure Kafka is running: `docker ps`
-- Check Kafka logs: `docker logs kafka`
-- Verify Kafka is accessible on port 9092
+- Ensure Kafka container is running: `docker-compose ps`
+- Check logs: `docker-compose logs kafka`
+- Restart services: `docker-compose restart`
 
-### Topic Creation
-Topics are created automatically when services start. If needed, manually create topics:
+### Database Issues
+- H2 console available at: http://localhost:8081/h2-console
+- Connection string: `jdbc:h2:mem:orderdb`
+- Username: `sa`, Password: (leave blank)
 
-```bash
-docker exec -it kafka kafka-topics --create --topic orders --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
-docker exec -it kafka kafka-topics --create --topic stock-updates --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
-docker exec -it kafka kafka-topics --create --topic email-notifications --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
-```
+### Port Already in Use
+- Change port in `application.yml` for the specific service
+- Or kill the process: `lsof -ti:8081 | xargs kill -9`
 
-### View Kafka Topics
-```bash
-docker exec -it kafka kafka-topics --list --bootstrap-server localhost:9092
-```
+## Contributing
 
-### View Messages in Topic
-```bash
-docker exec -it kafka kafka-console-consumer --topic orders --from-beginning --bootstrap-server localhost:9092
-```
-
-## Stop Services
-
-### Stop All Microservices
-Press `Ctrl+C` in each terminal where services are running.
-
-### Stop Kafka and Zookeeper
-```bash
-docker-compose down
-```
-
-To remove volumes as well:
-```bash
-docker-compose down -v
-```
-
-## Future Enhancements
-
-- Add API Gateway (Spring Cloud Gateway)
-- Implement circuit breaker pattern (Resilience4j)
-- Add distributed tracing with Sleuth and Zipkin
-- Implement service discovery with Eureka
-- Add comprehensive error handling and logging
-- Implement retry policies with exponential backoff
-- Add comprehensive unit and integration tests
-- Implement monitoring with Prometheus and Grafana
+Feel free to submit issues and enhancement requests!
 
 ## License
 
-This project is licensed under the MIT License.
+This project is open source and available under the MIT License.
