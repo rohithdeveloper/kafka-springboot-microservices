@@ -1,0 +1,12 @@
+target/
+.git
+.gitignore
+.idea
+*.iml
+*.iws
+*.ipr
+.DS_Store
+node_modules/
+.env
+.env.local
+.vscode/
